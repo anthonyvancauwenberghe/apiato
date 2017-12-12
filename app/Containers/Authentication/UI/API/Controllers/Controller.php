@@ -2,12 +2,16 @@
 
 namespace App\Containers\Authentication\UI\API\Controllers;
 
+use Apiato\Core\Foundation\Facades\Apiato;
+use App\Containers\Authentication\Transporters\ProxyApiLoginTransporter;
+use App\Containers\Authentication\Transporters\ProxyRefreshTransporter;
 use App\Containers\Authentication\UI\API\Requests\LoginRequest;
 use App\Containers\Authentication\UI\API\Requests\LogoutRequest;
 use App\Containers\Authentication\UI\API\Requests\RefreshRequest;
 use App\Ship\Parents\Controllers\ApiController;
+use App\Ship\Transporters\DataTransporter;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Cookie;
-use Apiato\Core\Foundation\Facades\Apiato;
 
 /**
  * Class Controller
@@ -24,7 +28,10 @@ class Controller extends ApiController
      */
     public function logout(LogoutRequest $request)
     {
-        Apiato::call('Authentication@ApiLogoutAction', [$request]);
+        $dataTransporter = new DataTransporter($request);
+        $dataTransporter->bearerToken = $request->bearerToken();
+
+        Apiato::call('Authentication@ApiLogoutAction', [$dataTransporter]);
 
         return $this->accepted([
             'message' => 'Token revoked successfully.',
@@ -45,13 +52,16 @@ class Controller extends ApiController
      */
     public function proxyLoginForAdminWebClient(LoginRequest $request)
     {
-        $result = Apiato::call('Authentication@ProxyApiLoginAction', [
-            $request,
-            env('CLIENT_WEB_ADMIN_ID'),
-            env('CLIENT_WEB_ADMIN_SECRET'),
-        ]);
+        $dataTransporter = new ProxyApiLoginTransporter(
+            array_merge($request->all(), [
+                'client_id'       => Config::get('authentication-container.clients.web.admin.id'),
+                'client_password' => Config::get('authentication-container.clients.web.admin.secret')
+            ])
+        );
 
-        return $this->json($result['response-content'])->withCookie($result['refresh-cookie']);
+        $result = Apiato::call('Authentication@ProxyApiLoginAction', [$dataTransporter]);
+
+        return $this->json($result['response_content'])->withCookie($result['refresh_cookie']);
     }
 
     /**
@@ -63,11 +73,16 @@ class Controller extends ApiController
      */
     public function proxyRefreshForAdminWebClient(RefreshRequest $request)
     {
-        $result = Apiato::call('Authentication@ProxyApiRefreshAction', [
-            $request,
-            env('CLIENT_WEB_ADMIN_ID'),
-            env('CLIENT_WEB_ADMIN_SECRET'),
-        ]);
+        $dataTransporter = new ProxyRefreshTransporter(
+            array_merge($request->all(), [
+                'client_id'       => Config::get('authentication-container.clients.web.admin.id'),
+                'client_password' => Config::get('authentication-container.clients.web.admin.secret'),
+                // use the refresh token sent in request data, if not exist try to get it from the cookie
+                'refresh_token'   => $request->refresh_token ? : $request->cookie('refreshToken'),
+            ])
+        );
+
+        $result = Apiato::call('Authentication@ProxyApiRefreshAction', [$dataTransporter]);
 
         return $this->json($result['response-content'])->withCookie($result['refresh-cookie']);
     }
