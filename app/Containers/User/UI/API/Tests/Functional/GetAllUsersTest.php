@@ -26,10 +26,12 @@ class GetAllUsersTest extends ApiTestCase
     /**
      * @test
      */
-    public function testGetAllUsersByAdmin_()
+    public function testGetAllUsers_()
     {
+        $totalUserCount = User::all()->count();
+
         // create some non-admin users who are clients
-        factory(User::class, 2)->create();
+        $createdUsers = factory(User::class, 2)->create();
 
         // send the HTTP request
         $response = $this->makeCall();
@@ -41,7 +43,7 @@ class GetAllUsersTest extends ApiTestCase
         $responseContent = $this->getResponseContentObject();
 
         // assert the returned data size is correct
-        $this->assertCount(4, $responseContent->data);
+        $this->assertCount($totalUserCount + $createdUsers->count(), $responseContent->data);
     }
 
     /**
